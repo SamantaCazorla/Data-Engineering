@@ -1,0 +1,72 @@
+import pandas as pd
+from bs4 import BeautifulSoup
+import requests
+import re
+import sam_stuff  # Library with passwords
+
+
+STEP 1 - GET THE DATA FOR CITIES:
+
+# Create an empty DataFrame with specified columns to store city data:
+city_df = pd.DataFrame(columns = ["city","country","population","latitude","longitude"]) 
+
+def citygrab2(city):
+    # Build the Wikipedia URL for the given city
+    url = "https://en.wikipedia.org/wiki/"+city
+    # Send an HTTP GET request to the URL
+    response = requests.get(url)
+    # Parse the HTML content of the page with BeautifulSoup
+    soup_city = BeautifulSoup(response.content, 'html.parser')
+
+     # Find the population data in the infobox
+    for header in soup_city.find_all(class_="infobox-header"):
+        if header.find(string=re.compile("population", re.IGNORECASE)):
+            popu = header.find_next(class_="infobox-data").text
+
+    # Find the country data in the infobox        
+    for merger in soup_city.find_all(class_="mergedtoprow"):
+        if merger.find(string=re.compile("country", re.IGNORECASE)):
+            country = merger.find_next(class_="infobox-data").text
+
+    # Find the country data for different page structure (e.g., London)        
+    for merger in soup_city.find_all(class_="mergedrow"):    
+        if merger.find(string=re.compile("country", re.IGNORECASE)):
+            country = merger.find_next(class_="infobox-data").text
+
+    # Find the coordinates data in the infobox
+    for coords in soup_city.find_all(class_="infobox-full-data"):
+        if coords.find(string=re.compile("Coordinates", re.IGNORECASE)):
+            lati = coords.find_next(class_="latitude").text
+            longi = coords.find_next(class_="longitude").text
+
+    # Add the extracted data to the DataFrame        
+    city_df.loc[len(city_df)]=({"city":str.capitalize(city), "country":country,"population":popu,"latitude":lati,"longitude":longi})
+
+    return city_df
+
+# Example usage: Fetch and add data for Berlin, and London
+citygrab2("Berlin")
+city = citygrab2("London")
+
+# Clean up the population data: remove references and commas, convert to numeric
+city['population'] = city['population'].str.replace('[1]','').str.replace(',','')
+city["population"] = pd.to_numeric(city["population"])
+
+# Display the DataFrame
+city
+
+
+
+STEP 2 - CREATE A CONECTION STRING WITH SQL
+
+schema = "gans"
+host = "127.0.0.1"
+user = "root"
+password = sam_stuff.my_sql_password   # YOUR MySQL PASSWORD
+port = 3306
+connection_string = f'mysql+pymysql://{user}:{password}@{host}:{port}/{schema}'
+
+
+
+STEP 3 - SEND THE DATA TO SQL
+city.to_sql(name='city',if_exists='append',con=connection_string,index=False)
