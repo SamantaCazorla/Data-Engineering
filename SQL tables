@@ -1,0 +1,58 @@
+-- DROP DATABASE IF EXISTS Gans;
+
+CREATE DATABASE gans;
+USE gans;
+
+-- DROP TABLE IF EXISTS city;
+-- DROP TABLE IF EXISTS airport;
+-- DROP TABLE IF EXISTS weather;
+-- DROP TABLE IF EXISTS flight;
+
+CREATE TABLE city (
+	city_id INT AUTO_INCREMENT,
+	city VARCHAR(255) NOT NULL,
+    country VARCHAR(255),
+    population INT,
+    latitude VARCHAR(50),
+    longitude VARCHAR(50),
+PRIMARY KEY (city_id)
+);
+
+
+CREATE TABLE airport (
+	ICAO VARCHAR(30),
+    city_id INT,
+    PRIMARY KEY (ICAO),
+    FOREIGN KEY (city_id) REFERENCES city (city_id)
+    );
+    
+
+CREATE TABLE weather(
+	  weather_id INT AUTO_INCREMENT,  
+    city_id INT,
+    city VARCHAR(255),
+    forecast_time TIMESTAMP,
+    temperature FLOAT,
+    feels_like FLOAT,
+    forecast VARCHAR(255),
+	  rain_in_last_3h FLOAT,
+	  wind_speed FLOAT,
+    data_retrieved_at TIMESTAMP,
+    
+    PRIMARY KEY (weather_id),
+    FOREIGN KEY (city_id) REFERENCES city(city_id)
+    );
+
+
+CREATE TABLE flight(
+	flight_id INT AUTO_INCREMENT,
+	ICAO VARCHAR(4),
+    from_city VARCHAR(255),
+    arrival_time DATETIME,
+    airline VARCHAR(255),
+    terminal VARCHAR(255),
+    flight_status VARCHAR(255),
+    
+    PRIMARY KEY (flight_id),
+    FOREIGN KEY (ICAO) REFERENCES airport(ICAO)
+    );
