@@ -4,8 +4,9 @@ import requests
 import re
 import sam_stuff  # Library with passwords
 
+# To get the data for CITIES:
 
-STEP 1 - GET THE DATA FOR CITIES:
+## STEP 1 - Get the data:
 
 # Create an empty DataFrame with specified columns to store city data:
 city_df = pd.DataFrame(columns = ["city","country","population","latitude","longitude"]) 
@@ -56,8 +57,7 @@ city["population"] = pd.to_numeric(city["population"])
 city
 
 
-
-STEP 2 - CREATE A CONECTION STRING WITH SQL
+## STEP 2 - Create a connection string with SQL
 
 schema = "gans"
 host = "127.0.0.1"
@@ -67,6 +67,35 @@ port = 3306
 connection_string = f'mysql+pymysql://{user}:{password}@{host}:{port}/{schema}'
 
 
-
-STEP 3 - SEND THE DATA TO SQL
+## STEP 3 - Send the data to SQL
 city.to_sql(name='city',if_exists='append',con=connection_string,index=False)
+
+
+
+#To get the data for AIRPORTS, the same principle as before can be followed, but here we just added the two ICAO codes to the two cities df:
+
+## STEP 1. Get the city table from SQL and populate it:
+
+#Fetch the city data from the database and load it into a DataFrame
+cities_df = pd.read_sql('city',con=connection_string)
+
+# Create a dictionary to store airport data
+airports_dict = {'ICAO':[],'city_id':[]}
+
+# Define a dictionary mapping city names to their respective ICAO codes
+icao_dict = { 'Berlin':'EDDB',
+             'London':'EGLL' }
+
+# Iterate through the DataFrame to populate the airports_dict and append the city_id and ICAO to the dictionary
+for i, row in cities_df.iterrows():
+    airports_dict['city_id'].append(row['city_id'])  
+    airports_dict['ICAO'].append(icao_dict[row['city']])
+
+# Convert the dictionary into a DataFrame:
+airports_df = pd.DataFrame(airports_dict)
+
+# Display resulting DataFrame:
+airports_df
+
+## STEP 2 - Send the data to SQL
+airports_df.to_sql('airport',if_exists='append',index=False, con=connection_string)
