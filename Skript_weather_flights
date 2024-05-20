@@ -92,6 +92,7 @@ airports_df = get_airports()
 airports_df
 
 def get_and_store_flights(airports_df):
+
     # Get the time from today and for tomorrow using timedelta:
     now = datetime.now()
     tomorrow = now + timedelta(days=1)
@@ -108,7 +109,8 @@ def get_and_store_flights(airports_df):
             'airline':[],
             'terminal':[],
             'flight_status':[]}
-    
+   
+    # For loop to create URL request for as many ICAO as we have in the list.
     for i, row in airports_df.iterrows():
         for time in times_lists:
             url = f"https://aerodatabox.p.rapidapi.com/flights/airports/icao/{row['ICAO']}/{tomorrow}T{time['from']}/{tomorrow}T{time['to']}"
