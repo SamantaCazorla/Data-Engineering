@@ -1,0 +1,139 @@
+import pandas as pd
+import requests
+import sqlalchemy
+import sam_stuff
+from datetime import timedelta, datetime
+from pytz import timezone
+from IPython.display import JSON
+
+
+# Get connection to SQL
+
+def get_connection_string():
+    schema = "gans"
+    host = "127.0.0.1"
+    user = "root"
+    password = sam_stuff.my_sql_password
+    port = 3306
+    
+    connection_string = f'mysql+pymysql://{user}:{password}@{host}:{port}/{schema}'
+    return connection_string
+
+
+### WEATHER  ###
+
+# Get city table from SQL
+def get_city():
+    con_string = get_connection_string()
+    city_df = pd.read_sql('city',con=con_string)
+    return city_df
+city_df = get_city()
+
+berlin_timezone = timezone('Europe/Berlin')
+API_key = sam_stuff.my_API_key
+
+def get_and_store_weather_data(city_df):
+# create a dictionary with weather itmes (keys)
+    weather_items = {
+        "city_id":[],  #*
+        "city": [],
+        "forecast_time": [],
+        "temperature": [],
+        "feels_like": [],
+        "forecast": [],
+        "rain_in_last_3h": [],
+        "wind_speed": [],
+        "data_retrieved_at": [],
+    }
+
+# create a url request for as many cities as we have in the list.
+    for i, row in city_df.iterrows():
+        # url request for so many cities as we have in the city_df:
+        url = (f"http://api.openweathermap.org/data/2.5/forecast?q={row['city']}&appid={API_key}&units=metric")
+        # instead of give "city", we need to go inside the row and get the city name. {row["city"]}
+        response = requests.get(url)
+        weather_json = response.json()
+        # give the desired timezone and time format.
+        my_timestamp = datetime.now(berlin_timezone).strftime("%Y-%m-%d %H:%M:%S")
+
+        # for loop through the first 8 entries (1 day) for parameters we need
+        for item in weather_json["list"][:8]:
+            weather_items['city_id'].append(row['city_id']),  #* We need this to conect weather_df to city_df (Primary key)
+            weather_items['city'].append(row['city']),  
+            weather_items["forecast_time"].append(item.get('dt_txt',None)),
+            weather_items["temperature"].append(item["main"].get("temp", None)),
+            weather_items["feels_like"].append(item["main"].get("feels_like", None)),
+            weather_items["forecast"].append(item["weather"][0].get("main", None)),
+            weather_items["rain_in_last_3h"].append(item.get("rain", {}).get("3h", 0)),
+            weather_items["wind_speed"].append(item["wind"].get("speed", None)),
+            weather_items['data_retrieved_at'].append(my_timestamp)
+    
+    # create dataframe of weather items:  
+    weather_df = pd.DataFrame(weather_items)
+
+    # to send it to sql:
+    my_con = get_connection_string()
+    weather_df.to_sql('weather',if_exists='append',con=my_con,index=False)
+
+#Call function for weather
+get_and_store_weather_data(city_df)
+
+
+
+### FLIGHTS ###
+
+#Create conection with SQL to get airport tables and its ICAO
+def get_airports():
+    connection_string = get_connection_string()
+    airports_df = pd.read_sql('airport',con=connection_string)
+    return airports_df
+
+airports_df = get_airports()
+airports_df
+
+def get_and_store_flights(airports_df):
+    # Get the time from today and for tomorrow using timedelta:
+    now = datetime.now()
+    tomorrow = now + timedelta(days=1)
+    tomorrow = tomorrow.strftime('%Y-%m-%d')
+
+    # because flights info is only given for the next 12 hours, we need to ask twice a day:
+    times_lists = [{'from':'00:00','to':'11:59'},{'from':'12:00','to':'23:59'}]
+
+    # Create a dictionary with flights items:
+    flights_dict = {
+            'ICAO':[],
+            'from_city':[],
+            'arrival_time':[],
+            'airline':[],
+            'terminal':[],
+            'flight_status':[]}
+    
+    for i, row in airports_df.iterrows():
+        for time in times_lists:
+            url = f"https://aerodatabox.p.rapidapi.com/flights/airports/icao/{row['ICAO']}/{tomorrow}T{time['from']}/{tomorrow}T{time['to']}"
+            querystring = {"withLeg":"true","withCancelled":"true","withCodeshared":"true","withCargo":"true","withPrivate":"true","withLocation":"false"}
+            headers = {
+                "X-RapidAPI-Key": "14a44098c8mshe4536a007985112p1e3b4bjsn8fd805eb6bd4",
+                "X-RapidAPI-Host": "aerodatabox.p.rapidapi.com"
+            }
+            response = requests.get(url, headers=headers, params=querystring)
+            
+            my_json = response.json()
+            
+            for flight in my_json['arrivals']:
+                flights_dict['ICAO'].append(row['ICAO'])
+                flights_dict['arrival_time'].append(flight['arrival'].get('scheduledTime',{}).get('local',None))
+                flights_dict['from_city'].append(flight['departure'].get('airport',{}).get('name','unknown'))
+                flights_dict['airline'].append(flight['airline'].get('name',None))
+                flights_dict['terminal'].append(flight['arrival'].get('terminal','unknown'))
+                flights_dict['flight_status'].append(flight.get('status',None))
+
+    # Get flights into DataFrame:
+    flight_df = pd.DataFrame(flights_dict)
+    # Change format of arrival time:
+    flight_df['arrival_time'] = flight_df['arrival_time'].str[:-6]
+    
+    # Transfer flights_df to SQL airport table:
+    flight_df.to_sql('flight',con=connection_string,index=False,if_exists='append')
+
